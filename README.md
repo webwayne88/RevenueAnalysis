@@ -28,8 +28,10 @@ pip install -r requirements.txt
 3. Настройте переменные окружения:
 Создайте файл `.env` и укажите:
 ```
+LLM_AUTH_URL=https://your-llm-service/auth
+LLM_SCOPE=your_scope
 LLM_API_KEY=your_api_key
-LLM_API_URL=https://gigachat/api/v1/analyze
+LLM_MODEL= model
 ```
 
 4. Запустить сервер и интерфейсы с помощью:
