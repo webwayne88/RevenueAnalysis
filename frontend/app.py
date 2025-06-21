@@ -5,12 +5,12 @@ import plotly.express as px
 
 BACKEND_URL = "http://localhost:8000"  
 
-def upload_file():
+
+def upload_zip_file():
     """Блок загрузки файла"""
     uploaded_file = st.file_uploader(
         "Загрузите ZIP-архив с Excel-файлами", 
         type="zip",
-        help="Архив должен содержать файлы в формате ГГГГ.xlsx (например: 2020.xlsx)"
     )
     
     if uploaded_file:
@@ -20,20 +20,16 @@ def upload_file():
 
 def process_file(uploaded_file):
     """Отправка файла на бэкенд и обработка результатов"""
+    
     with st.spinner("Обработка данных..."):
         try:
             files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
             response = requests.post(
-                f"{BACKEND_URL}/process_zip",
+                f"{BACKEND_URL}/analyze",
                 files=files
             )
-            
             if response.status_code == 200:
-                data = response.json()
-                df = pd.DataFrame.from_dict(data, orient='index', columns=['Выручка'])
-                df.index = df.index.astype(int)
-                df.sort_index(inplace=True)
-                return df
+                return response.json()
             else:
                 st.error(f"Ошибка обработки файла: {response.json().get('detail', 'Неизвестная ошибка')}")
                 return None
@@ -45,12 +41,11 @@ def process_file(uploaded_file):
 
 def create_plot(df):
     """Отображение графика"""
-    
+
     fig = px.line(
         df, 
         x=df.index, 
         y="Выручка",
-        title="Динамика выручки по годам",
         labels={"index": "Год", "Выручка": "Выручка, руб."},
         markers=True,
         line_shape="linear",
@@ -65,38 +60,37 @@ def create_plot(df):
     return fig 
 
 
-def llm_analysis(df):
-    """Отображение анализа данных"""    
-    response = requests.post(
-        f"{BACKEND_URL}/get-analysis",  # или ваш URL API
-        json={"data": df['Выручка'].to_dict()},
-        timeout=20
-    )
-    
-    if response.status_code == 200:
-        analysis = response.json().get("analysis", "")
-        return analysis
-
-    
-def main():
-    st.set_page_config(page_title="Анализ динамики выручки компании")
-    st.title("Анализ динамики выручки компании")
-    uploaded_file = upload_file()
-
-    if uploaded_file:
-        df = process_file(uploaded_file)
-        if df is not None:
-            st.plotly_chart(create_plot(df), use_container_width=True)
-            st.subheader('Аналитический отчет')
-            analysis = llm_analysis(df)
-            if analysis:
-                blocks = analysis.split('block')
-                with st.expander('Основные показатели'):
-                        st.markdown(blocks[0])
-                with st.expander('Анализ динамики'):
-                        st.markdown(blocks[1])
-                with st.expander('Итоговые выводы'):
-                        st.markdown(blocks[2])
-                
 if __name__=='__main__':
-    main()
+    st.set_page_config(page_title="Анализ динамики выручки компании", layout="wide")
+    st.title("Анализ динамики выручки компании")
+
+    zip_file = upload_zip_file()
+
+    if zip_file:
+        data = process_file(zip_file)
+        if data:
+            df = pd.DataFrame(
+                data["revenue_data"].items(),
+                columns=["Год", "Выручка"]
+            )
+            df = df.set_index("Год")
+
+            st.subheader("Динамика выручки по годам")
+            st.plotly_chart(create_plot(df), use_container_width=True)
+
+            st.subheader('Аналитический отчет')
+            analysis = data["llm_response"]["analysis"]
+
+            blocks = [block.strip() for block in analysis.split("---")]
+
+            for block in blocks:
+                if not block:
+                    continue
+
+                header = block.split("\n")[0].strip("*").strip()
+                body = "\n".join(block.split("\n")[1:]).strip()
+                
+                with st.expander(header):
+                    st.markdown(body)
+            
+
